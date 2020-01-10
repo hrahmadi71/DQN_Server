@@ -8,7 +8,9 @@ from werkzeug.exceptions import BadRequest
 # Swagger models:
 
 get_q_values_request_body_model = api.model('DQNetInputModel', {
-    'state': fields.List(fields.Float)
+    'action_type': fields.Integer,
+    'common_state': fields.List(fields.Float),
+    'action_params': fields.List(fields.Float)
 })
 
 train_model_request_body_model = api.model('TrainModel', {
@@ -17,9 +19,11 @@ train_model_request_body_model = api.model('TrainModel', {
 })
 
 get_experience_model_request_body_model = api.model('GetExperienceModel', {
-    'old_state': fields.List(fields.Float),
+    'action_type': fields.Integer,
     'action': fields.Integer,
-    'new_state': fields.List(fields.Float),
+    'old_common_state': fields.List(fields.Float),
+    'new_common_state': fields.List(fields.Float),
+    'action_params': fields.List(fields.Float),
     'reward': fields.Float,
 })
 
@@ -29,11 +33,11 @@ trained_network_request_body_model = api.model('TrainedNetworkWeightsModel', {
 
 
 # error handling functions:
-def get_and_evaluate_numeric_list(data, list_name, length):
+def get_and_evaluate_numeric_list(data, list_name, lengths):
     desired_list = data[list_name]
-    if len(desired_list) != length:
-        raise BadRequest("Size of '{0}' tensor must be {1} but length of the q_values you sent is {2}!"
-                         .format(list_name, length, len(desired_list)))
+    if len(desired_list) not in lengths:
+        raise BadRequest("Size of '{0}' tensor suppose to be {1} but length of the q_values you sent is {2}!"
+                         .format(list_name, lengths, len(desired_list)))
 
     if not all(isinstance(e, float) or isinstance(e, int) for e in desired_list):
         raise BadRequest("Every element of '{}' must be integer or float.".format(list_name))
@@ -66,22 +70,27 @@ class GetQValues(Resource):
     @api.doc(body=get_q_values_request_body_model)
     def post(self):
         data = api.payload
-        state = get_and_evaluate_numeric_list(data, list_name='state', length=DQN.get_state_regular_len())
+        action_type = get_and_evaluate(data, element_name='action_type', element_type=int)
+        state = get_and_evaluate_numeric_list(data, list_name='common_state', lengths=[DQN.get_common_state_regular_len()])
+        action_parameters = get_and_evaluate_numeric_list(data, list_name='action_params', lengths=[6, 8, 10])
         dic = {
-            'q_values': DQN.get_q_values(state=state)
+            'q_values': DQN.get_q_values(action_type=action_type,
+                                         common_state=state,
+                                         action_parameters=action_parameters)
         }
         return jsonify(dic)
 
 
-@api.route('/train/')
-class TrainModel(Resource):
-    @api.doc(body=train_model_request_body_model)
-    def post(self):
-        data = api.payload
-        state = get_and_evaluate_numeric_list(data, list_name='state', length=DQN.get_state_regular_len())
-        q_values = get_and_evaluate_numeric_list(data, list_name='q_values', length=DQN.get_q_values_list_regular_len())
-        DQN.train(state=state, q_values=q_values)
-        return jsonify({'message': 'q_values updated successfully.'})
+# @api.route('/train/')
+# class TrainModel(Resource):
+#     @api.doc(body=train_model_request_body_model)
+#     def post(self):
+#         data = api.payload
+#         state = get_and_evaluate_numeric_list(data, list_name='state', length=DQN.get_state_regular_len())
+#         q_values = get_and_evaluate_numeric_list(data, list_name='q_values',
+#                                                  length=DQN.get_q_values_list_regular_len())
+#         DQN.train(state=state, q_values=q_values)
+#         return jsonify({'message': 'q_values updated successfully.'})
 
 
 @api.route('/get_experience/')
@@ -89,11 +98,32 @@ class GetExperience(Resource):
     @api.doc(body=get_experience_model_request_body_model)
     def post(self):
         data = api.payload
-        old_state = get_and_evaluate_numeric_list(data, list_name='old_state', length=DQN.get_state_regular_len())
+        action_type = get_and_evaluate(data, element_name='action_type', element_type=int)
         action = get_and_evaluate(data, element_name='action', element_type=int)
-        new_state = get_and_evaluate_numeric_list(data, list_name='new_state', length=DQN.get_state_regular_len())
+        old_common_state = get_and_evaluate_numeric_list(data,
+                                                         list_name='old_common_state',
+                                                         lengths=[DQN.get_common_state_regular_len()])
+        new_common_state = get_and_evaluate_numeric_list(data,
+                                                         list_name='new_common_state',
+                                                         lengths=[DQN.get_common_state_regular_len()])
+        action_parameters = get_and_evaluate_numeric_list(data,
+                                                          list_name='action_params',
+                                                          lengths=[6, 8, 10])
         reward = get_and_evaluate_reward(data)
-        DQN.get_experience(old_state, action, new_state, reward)
+        print('at: {0}, ac: {1}, osl: {2}, nsl: {3}, apl: {4}, r: {5}'.format(
+            action_type,
+            action,
+            len(old_common_state),
+            len(new_common_state),
+            len(action_parameters),
+            reward
+        ))
+        DQN.get_experience(action_type=action_type,
+                           action=action,
+                           old_common_state=old_common_state,
+                           new_common_state=new_common_state,
+                           action_parameters=action_parameters,
+                           reward=reward)
         return jsonify({
             "message": "Now I've got more gray beard!"
         })

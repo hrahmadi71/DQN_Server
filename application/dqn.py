@@ -111,46 +111,43 @@ class DQNCore:
 
 class DQN:
     __network = DQNCore(learning_rate=0.01, discount=0.95)
-    __cached_action_params = [
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    ]
+    __possible_actions = []
+
+    @staticmethod
+    def set_possible_actions(possible_actions):
+        possible_actions = sorted(possible_actions, key=lambda t: t[0])
+        possible_actions = sorted(possible_actions, key=lambda t: t[1])
+        last = object()
+        for t in possible_actions:
+            if t == last:
+                continue
+            last = t
+            DQN.__possible_actions.append(t)
 
     @staticmethod
     def get_q_values(action_type, common_state, action_parameters):
         state = common_state + action_parameters
         return DQN.__network.get_q_values(action_type=action_type, state=state)
 
-    # @staticmethod
-    # def train(state, q_values):
-    #     DQN.__network.train(state, q_values)
-
-    # @staticmethod
-    # def get_experience(old_state, action, new_state, reward):
-    #     old_state_q_values = DQN.__network.get_q_values(old_state)
-    #     new_state_q_values = DQN.__network.get_q_values(new_state)
-    #     old_state_q_values[action] = reward + DQN.__network.discount * np.amax(new_state_q_values)
-    #     DQN.__network.train(old_state, old_state_q_values)
-
     @staticmethod
     def get_experience(action_type, action, old_common_state, new_common_state, action_parameters, reward):
         old_state = old_common_state + action_parameters
-        new_state = new_common_state + action_parameters
         old_state_q_values = DQN.__network.get_q_values(action_type, old_state)
-        
-        new_state_q_values = DQN.__network.get_q_values(action_type, new_state)
-
-        old_state_q_values[action] = reward + DQN.__network.discount * np.argmax(new_state_q_values)
+        old_state_q_values[action] = reward + \
+                                     DQN.__network.discount * DQN.__get_max_q_value_of_a_common_state(new_common_state)
         DQN.__network.train(action_type=action_type, state=old_state, q_values=old_state_q_values)
+
+    @staticmethod
+    def __get_max_q_value_of_a_common_state(common_state):
+        max_values = []
+        for action_type, action_params in DQN.__possible_actions:
+            max_values.append(np.amax(DQN.__network.get_q_values(action_type=action_type,
+                                                                   state=common_state + action_params)))
+        return np.amax(max_values)
 
     @staticmethod
     def get_common_state_regular_len():
         return DQN.__network.get_common_state_size()
-    #
-    # @staticmethod
-    # def get_q_values_list_regular_len():
-    #     return DQN.__network.get_output_size()
 
     @staticmethod
     def save_model(name):

@@ -1,4 +1,4 @@
-from application import app, api
+from application import api
 from flask import jsonify
 from flask_restplus import Resource, fields
 from application.dqn import DQN
@@ -29,6 +29,15 @@ get_experience_model_request_body_model = api.model('GetExperienceModel', {
 
 trained_network_request_body_model = api.model('TrainedNetworkWeightsModel', {
     'model_name': fields.String
+})
+
+possible_actions_model = api.model('PossibleActionModel', {
+    'action_type': fields.Integer,
+    'action_params': fields.List(fields.Integer)
+})
+
+possible_actions_list_request_body_model = api.model('PossobleActionsListModel', {
+    'possible_actions': fields.List(fields.Nested(possible_actions_model))
 })
 
 
@@ -65,6 +74,16 @@ def get_and_evaluate_reward(data):
 
 
 # APIs:
+@api.route('/possible_actions/')
+class PostPossibleActions(Resource):
+    @api.doc(body=possible_actions_list_request_body_model)
+    def post(self):
+        possible_actions = []
+        for action in api.payload['possible_actions']:
+            possible_actions.append((action['action_type'], action['action_params']))
+        DQN.set_possible_actions(possible_actions)
+
+
 @api.route('/get_q_values/')
 class GetQValues(Resource):
     @api.doc(body=get_q_values_request_body_model)
@@ -79,18 +98,6 @@ class GetQValues(Resource):
                                          action_parameters=action_parameters)
         }
         return jsonify(dic)
-
-
-# @api.route('/train/')
-# class TrainModel(Resource):
-#     @api.doc(body=train_model_request_body_model)
-#     def post(self):
-#         data = api.payload
-#         state = get_and_evaluate_numeric_list(data, list_name='state', length=DQN.get_state_regular_len())
-#         q_values = get_and_evaluate_numeric_list(data, list_name='q_values',
-#                                                  length=DQN.get_q_values_list_regular_len())
-#         DQN.train(state=state, q_values=q_values)
-#         return jsonify({'message': 'q_values updated successfully.'})
 
 
 @api.route('/get_experience/')
@@ -110,14 +117,6 @@ class GetExperience(Resource):
                                                           list_name='action_params',
                                                           lengths=[6, 8, 10])
         reward = get_and_evaluate_reward(data)
-        print('at: {0}, ac: {1}, osl: {2}, nsl: {3}, apl: {4}, r: {5}'.format(
-            action_type,
-            action,
-            len(old_common_state),
-            len(new_common_state),
-            len(action_parameters),
-            reward
-        ))
         DQN.get_experience(action_type=action_type,
                            action=action,
                            old_common_state=old_common_state,

@@ -128,7 +128,7 @@ class GetExperience(Resource):
         })
 
 
-@api.route('/save_wights/')
+@api.route('/save_weights/')
 class SaveModel(Resource):
     @api.doc(body=trained_network_request_body_model)
     def post(self):
